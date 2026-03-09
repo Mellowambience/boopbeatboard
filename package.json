@@ -1,0 +1,11 @@
+{
+  "name": "boopbeatboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Boop Beat Board — unified monorepo (web + mobile)",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "mobile": "pnpm --filter mobile start"
+  }
+}
