@@ -4,27 +4,59 @@ on:
   push:
     branches: [main]
 
+# Each job only runs when its source directory actually exists
+# and its required secrets are present. This prevents failures
+# during the bootstrap phase (before web/ is populated).
+
 jobs:
-  # ── Web → Vercel ─────────────────────────────────────────────
+  # ── Web → Vercel ──────────────────────────────────────────────
   web-deploy:
     name: Web — build + deploy to Vercel
     runs-on: ubuntu-latest
+    # Only run when web/ content exists and Vercel secrets are set
+    if: |
+      github.event_name == 'push' &&
+      vars.VERCEL_PROJECT_ID != '' &&
+      secrets.VERCEL_TOKEN != ''
     defaults:
       run:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check web/ exists
+        id: web_exists
+        run: |
+          if [ -f web/package.json ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "::notice::web/package.json not found — skipping web deploy"
+          fi
+        working-directory: .
+
       - uses: pnpm/action-setup@v3
+        if: steps.web_exists.outputs.exists == 'true'
         with:
           version: 9
+
       - uses: actions/setup-node@v4
+        if: steps.web_exists.outputs.exists == 'true'
         with:
           node-version: 20
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
+
+      - name: Install dependencies
+        if: steps.web_exists.outputs.exists == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        if: steps.web_exists.outputs.exists == 'true'
+        run: pnpm build
+
       - name: Deploy to Vercel
+        if: steps.web_exists.outputs.exists == 'true'
         run: |
           npm i -g vercel
           vercel --prod --token ${{ secrets.VERCEL_TOKEN }} --yes
@@ -36,19 +68,43 @@ jobs:
   mobile-build:
     name: Mobile — EAS build (iOS)
     runs-on: ubuntu-latest
+    # Only run when mobile/ exists and EAS token is set
     defaults:
       run:
         working-directory: mobile
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check mobile/ exists
+        id: mobile_exists
+        run: |
+          if [ -f mobile/package.json ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "::notice::mobile/package.json not found — skipping EAS build"
+          fi
+        working-directory: .
+
       - uses: actions/setup-node@v4
+        if: steps.mobile_exists.outputs.exists == 'true'
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
-      - run: npm install
+
+      - name: Install dependencies
+        if: steps.mobile_exists.outputs.exists == 'true'
+        run: npm install
+
       - uses: expo/expo-github-action@v8
+        if: steps.mobile_exists.outputs.exists == 'true' && env.EXPO_TOKEN != ''
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
-      - run: eas build --platform ios --non-interactive --profile preview
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: EAS Build
+        if: steps.mobile_exists.outputs.exists == 'true' && env.EXPO_TOKEN != ''
+        run: eas build --platform ios --non-interactive --profile preview
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
