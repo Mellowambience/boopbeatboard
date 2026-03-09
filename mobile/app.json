@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Boop Beat Board",
+    "slug": "boop-beat-board",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0a0a0f",
+    "splash": {
+      "backgroundColor": "#0a0a0f"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.aetherhaven.boopbeatboard",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Boop Beat Board uses the microphone for beat detection and live input."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0a0a0f"
+      },
+      "package": "com.aetherhaven.boopbeatboard"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-haptics"
+    ],
+    "scheme": "boopbeatboard",
+    "extra": {
+      "BBB_URL": "https://boopbeatboard.vercel.app"
+    }
+  }
+}
