@@ -4,20 +4,15 @@ on:
   push:
     branches: [main]
 
-# Each job only runs when its source directory actually exists
-# and its required secrets are present. This prevents failures
-# during the bootstrap phase (before web/ is populated).
+# Both jobs always start. Each skips gracefully via inner file-existence
+# checks so bootstrap commits (before web/ or mobile/ are populated)
+# produce passing runs instead of "No jobs were run" failures.
 
 jobs:
-  # ── Web → Vercel ──────────────────────────────────────────────
+  # ── Web → Vercel ──────────────────────────────────────────────────
   web-deploy:
     name: Web — build + deploy to Vercel
     runs-on: ubuntu-latest
-    # Only run when web/ content exists and Vercel secrets are set
-    if: |
-      github.event_name == 'push' &&
-      vars.VERCEL_PROJECT_ID != '' &&
-      secrets.VERCEL_TOKEN != ''
     defaults:
       run:
         working-directory: web
@@ -56,7 +51,9 @@ jobs:
         run: pnpm build
 
       - name: Deploy to Vercel
-        if: steps.web_exists.outputs.exists == 'true'
+        if: |
+          steps.web_exists.outputs.exists == 'true' &&
+          secrets.VERCEL_TOKEN != ''
         run: |
           npm i -g vercel
           vercel --prod --token ${{ secrets.VERCEL_TOKEN }} --yes
@@ -64,11 +61,10 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-  # ── Mobile → EAS ──────────────────────────────────────────────
+  # ── Mobile → EAS ──────────────────────────────────────────────────
   mobile-build:
     name: Mobile — EAS build (iOS)
     runs-on: ubuntu-latest
-    # Only run when mobile/ exists and EAS token is set
     defaults:
       run:
         working-directory: mobile
@@ -96,7 +92,9 @@ jobs:
         run: npm install
 
       - uses: expo/expo-github-action@v8
-        if: steps.mobile_exists.outputs.exists == 'true' && env.EXPO_TOKEN != ''
+        if: |
+          steps.mobile_exists.outputs.exists == 'true' &&
+          secrets.EXPO_TOKEN != ''
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
@@ -104,7 +102,9 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
       - name: EAS Build
-        if: steps.mobile_exists.outputs.exists == 'true' && env.EXPO_TOKEN != ''
+        if: |
+          steps.mobile_exists.outputs.exists == 'true' &&
+          secrets.EXPO_TOKEN != ''
         run: eas build --platform ios --non-interactive --profile preview
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
