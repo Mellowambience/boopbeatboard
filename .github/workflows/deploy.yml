@@ -4,12 +4,12 @@ on:
   push:
     branches: [main]
 
-# Both jobs always start. Each skips gracefully via inner file-existence
-# checks so bootstrap commits (before web/ or mobile/ are populated)
-# produce passing runs instead of "No jobs were run" failures.
+# DESIGN: Both jobs always start and self-skip via file-existence checks.
+# No secrets or vars references in any if: condition — GitHub does not
+# expose those contexts during workflow parsing, causing zero-job failures.
 
 jobs:
-  # ── Web → Vercel ──────────────────────────────────────────────────
+  # ── Web → Vercel ────────────────────────────────────────────────────
   web-deploy:
     name: Web — build + deploy to Vercel
     runs-on: ubuntu-latest
@@ -21,6 +21,7 @@ jobs:
 
       - name: Check web/ exists
         id: web_exists
+        working-directory: .
         run: |
           if [ -f web/package.json ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
@@ -28,7 +29,6 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "::notice::web/package.json not found — skipping web deploy"
           fi
-        working-directory: .
 
       - uses: pnpm/action-setup@v3
         if: steps.web_exists.outputs.exists == 'true'
@@ -51,9 +51,7 @@ jobs:
         run: pnpm build
 
       - name: Deploy to Vercel
-        if: |
-          steps.web_exists.outputs.exists == 'true' &&
-          secrets.VERCEL_TOKEN != ''
+        if: steps.web_exists.outputs.exists == 'true'
         run: |
           npm i -g vercel
           vercel --prod --token ${{ secrets.VERCEL_TOKEN }} --yes
@@ -61,7 +59,7 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-  # ── Mobile → EAS ──────────────────────────────────────────────────
+  # ── Mobile → EAS ────────────────────────────────────────────────────
   mobile-build:
     name: Mobile — EAS build (iOS)
     runs-on: ubuntu-latest
@@ -73,6 +71,7 @@ jobs:
 
       - name: Check mobile/ exists
         id: mobile_exists
+        working-directory: .
         run: |
           if [ -f mobile/package.json ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
@@ -80,7 +79,6 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "::notice::mobile/package.json not found — skipping EAS build"
           fi
-        working-directory: .
 
       - uses: actions/setup-node@v4
         if: steps.mobile_exists.outputs.exists == 'true'
@@ -91,20 +89,31 @@ jobs:
         if: steps.mobile_exists.outputs.exists == 'true'
         run: npm install
 
+      - name: Check EXPO_TOKEN set
+        id: expo_token_check
+        if: steps.mobile_exists.outputs.exists == 'true'
+        run: |
+          if [ -n "$EXPO_TOKEN" ]; then
+            echo "has_token=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_token=false" >> $GITHUB_OUTPUT
+            echo "::notice::EXPO_TOKEN not set — skipping EAS build"
+          fi
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
       - uses: expo/expo-github-action@v8
         if: |
           steps.mobile_exists.outputs.exists == 'true' &&
-          secrets.EXPO_TOKEN != ''
+          steps.expo_token_check.outputs.has_token == 'true'
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
       - name: EAS Build
         if: |
           steps.mobile_exists.outputs.exists == 'true' &&
-          secrets.EXPO_TOKEN != ''
+          steps.expo_token_check.outputs.has_token == 'true'
         run: eas build --platform ios --non-interactive --profile preview
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
